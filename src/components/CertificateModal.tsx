@@ -1,7 +1,7 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
-import { Download, X } from 'lucide-react';
+import { Download, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { ODI_DATA } from '../data/catData';
 
 interface CertificateModalProps {
@@ -528,7 +528,32 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   currentAge,
 }) => {
   const certificateRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [viewMode, setViewMode] = useState<'fit' | 'full'>('fit');
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const measure = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.clientWidth);
+      } else {
+        setContainerWidth(window.innerWidth);
+      }
+    };
+
+    measure();
+    const t = setTimeout(measure, 50);
+    window.addEventListener('resize', measure);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', measure);
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -538,10 +563,21 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
     year: 'numeric',
   });
 
+  // Calculate dynamic responsive scale
+  const paddingH = isMobile ? 16 : 40;
+  const availW = containerWidth > 0 ? Math.max(260, containerWidth - paddingH) : (typeof window !== 'undefined' ? window.innerWidth - 32 : 840);
+  const fitScale = Math.min(1, availW / 840);
+  const actualScale = (viewMode === 'fit' && !isGenerating) ? fitScale : 1;
+  const renderedWidth = 840 * actualScale;
+  const renderedHeight = 560 * actualScale;
+
   const handleDownloadPDF = async () => {
     if (!certificateRef.current) return;
     setIsGenerating(true);
     try {
+      // Small pause to allow scale reset
+      await new Promise((r) => setTimeout(r, 60));
+
       // Capture at 3x for crisp PDF
       const canvas = await html2canvas(certificateRef.current, {
         scale: 3,
@@ -549,7 +585,6 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
         allowTaint: true,
         logging: false,
         backgroundColor: '#ffffff',
-        // Don't use window scroll — capture exactly what's in the element
         x: 0,
         y: 0,
         scrollX: 0,
@@ -558,6 +593,14 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
         height: 560,
         windowWidth: 840,
         windowHeight: 560,
+        onclone: (clonedDoc) => {
+          const scaleWrap = clonedDoc.getElementById('odi-cert-scale-wrapper');
+          if (scaleWrap) {
+            scaleWrap.style.transform = 'none';
+            scaleWrap.style.width = '840px';
+            scaleWrap.style.height = '560px';
+          }
+        },
       });
 
       const imgData = canvas.toDataURL('image/png');
@@ -602,40 +645,241 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
   };
 
   return (
-    <div style={S.overlay}>
-      <div style={S.shell}>
-        {/* Header */}
-        <div style={S.header}>
-          <div style={S.headerLeft}>
-            <div style={S.headerIcon}>👑</div>
-            <div>
-              <div style={S.headerTitle}>ROYAL FELINE PEDIGREE DIPLOMA</div>
-              <div style={S.headerSub}>Official High-Definition Print Layout</div>
+    <div
+      style={{
+        ...S.overlay,
+        padding: isMobile ? '8px' : '16px',
+      }}
+    >
+      <div
+        style={{
+          ...S.shell,
+          borderRadius: isMobile ? '16px' : '20px',
+          maxHeight: isMobile ? '98vh' : '96vh',
+        }}
+      >
+        {/* Loading overlay for high-res PDF generation */}
+        {isGenerating && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: 'rgba(255, 255, 255, 0.94)',
+              backdropFilter: 'blur(4px)',
+              zIndex: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                border: '3px solid #f59e0b',
+                borderTopColor: 'transparent',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }}
+            />
+            <div
+              style={{
+                fontWeight: 800,
+                fontSize: 14,
+                color: '#0f172a',
+                fontFamily: 'Cinzel, Georgia, serif',
+                letterSpacing: '0.05em',
+              }}
+            >
+              Rendering High-Definition PDF…
+            </div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              Formatting A4 Landscape with official seal
             </div>
           </div>
-          <div style={S.headerRight}>
+        )}
+
+        {/* Header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: isMobile ? '10px 12px' : '14px 18px',
+            borderBottom: '1px solid #e2e8f0',
+            backgroundColor: '#f8fafc',
+            flexShrink: 0,
+            gap: 8,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 8 : 10, minWidth: 0 }}>
+            <div
+              style={{
+                width: isMobile ? 30 : 34,
+                height: isMobile ? 30 : 34,
+                borderRadius: 10,
+                backgroundColor: 'rgba(245,158,11,0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: isMobile ? 16 : 18,
+                flexShrink: 0,
+              }}
+            >
+              👑
+            </div>
+            <div style={{ minWidth: 0, overflow: 'hidden' }}>
+              <div
+                style={{
+                  fontWeight: 800,
+                  fontSize: isMobile ? 12 : 14,
+                  letterSpacing: '0.06em',
+                  color: '#0f172a',
+                  fontFamily: 'Cinzel, Georgia, serif',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                }}
+              >
+                ROYAL FELINE DIPLOMA
+              </div>
+              {!isMobile && (
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                  Official High-Definition Print Layout
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 6 : 8, flexShrink: 0 }}>
+            {/* View Mode Toggle when scaled */}
+            {fitScale < 0.98 && (
+              <button
+                style={{
+                  backgroundColor: '#f1f5f9',
+                  color: '#334155',
+                  fontWeight: 700,
+                  fontSize: 12,
+                  padding: isMobile ? '6px 10px' : '8px 12px',
+                  borderRadius: 10,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  border: '1px solid #cbd5e1',
+                  cursor: 'pointer',
+                }}
+                onClick={() => setViewMode((v) => (v === 'fit' ? 'full' : 'fit'))}
+                title={viewMode === 'fit' ? 'View 100% full scale' : 'Fit to screen'}
+              >
+                {viewMode === 'fit' ? (
+                  <>
+                    <ZoomIn size={13} />
+                    <span>100%</span>
+                  </>
+                ) : (
+                  <>
+                    <ZoomOut size={13} />
+                    <span>Fit</span>
+                  </>
+                )}
+              </button>
+            )}
+
             <button
               style={{
-                ...S.downloadBtn,
-                opacity: isGenerating ? 0.6 : 1,
+                backgroundColor: '#f59e0b',
+                color: '#0f172a',
+                fontWeight: 900,
+                fontSize: isMobile ? 12 : 13,
+                padding: isMobile ? '6px 12px' : '8px 18px',
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                border: 'none',
                 cursor: isGenerating ? 'not-allowed' : 'pointer',
+                opacity: isGenerating ? 0.6 : 1,
+                boxShadow: '0 4px 14px rgba(245,158,11,0.25)',
+                whiteSpace: 'nowrap',
               }}
               onClick={handleDownloadPDF}
               disabled={isGenerating}
             >
-              <Download size={15} />
-              {isGenerating ? 'Rendering…' : 'Download .PDF'}
+              <Download size={14} />
+              {isGenerating ? 'Rendering…' : (isMobile ? 'PDF' : 'Download .PDF')}
             </button>
-            <button style={S.closeBtn} onClick={onClose} title="Close">
-              <X size={20} />
+
+            <button
+              style={{
+                padding: isMobile ? 6 : 8,
+                borderRadius: 10,
+                border: 'none',
+                background: 'transparent',
+                color: '#64748b',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              onClick={onClose}
+              title="Close"
+            >
+              <X size={18} />
             </button>
           </div>
         </div>
 
         {/* Scroll area */}
-        <div style={S.scrollArea}>
-          {/* ── CERTIFICATE CANVAS (inline-styled only) ── */}
-          <div ref={certificateRef} style={certPx.root}>
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'auto',
+            backgroundColor: '#e2e8f0',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: viewMode === 'fit' ? 'center' : 'flex-start',
+            padding: isMobile ? '12px 8px' : '20px',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          <div
+            ref={containerRef}
+            style={{
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '100%',
+            }}
+          >
+            {/* Scaled certificate container */}
+            <div
+              style={{
+                width: renderedWidth,
+                height: renderedHeight,
+                margin: '0 auto',
+                position: 'relative',
+                flexShrink: 0,
+                transition: 'width 0.2s ease, height 0.2s ease',
+              }}
+            >
+              <div
+                id="odi-cert-scale-wrapper"
+                style={{
+                  transform: `scale(${actualScale})`,
+                  transformOrigin: 'top left',
+                  width: 840,
+                  height: 560,
+                  transition: 'transform 0.2s ease',
+                }}
+              >
+                {/* ── CERTIFICATE CANVAS (inline-styled only) ── */}
+                <div ref={certificateRef} id="odi-cert-canvas" style={certPx.root}>
             {/* Decorative borders */}
             <div style={certPx.outerBorder} />
             <div style={certPx.innerBorder} />
@@ -779,10 +1023,39 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
                 </p>
               </div>
             </div>
+            </div>
+            {/* ── END CERTIFICATE CANVAS ── */}
           </div>
-          {/* ── END CERTIFICATE CANVAS ── */}
         </div>
+
+        {/* Mobile helper notice */}
+        {isMobile && !isGenerating && (
+          <div
+            style={{
+              marginTop: 10,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 11,
+              color: '#475569',
+              backgroundColor: 'rgba(255,255,255,0.85)',
+              backdropFilter: 'blur(4px)',
+              padding: '4px 12px',
+              borderRadius: 20,
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              fontWeight: 600,
+            }}
+          >
+            {viewMode === 'fit' ? (
+              <span>✦ Scaled to fit screen • Tap "100%" for full view</span>
+            ) : (
+              <span>↔ Swipe horizontally to pan full certificate</span>
+            )}
+          </div>
+        )}
       </div>
     </div>
-  );
+  </div>
+</div>
+);
 };
